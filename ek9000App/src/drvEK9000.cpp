@@ -9,3 +9,10 @@
 #include <epicsString.h> 
 #include <asynPortClient.h>
 
+
+void ek9k_register()
+{
+
+}
+
+epicsExportRegistrar(ek9k_register);
