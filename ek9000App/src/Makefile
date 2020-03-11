@@ -11,7 +11,7 @@ DBD += devEK9000.dbd
 DBD += ek9000.dbd
 DBD += ek9000Include.dbd
 
-USR_CXXFLAGS += --std=c++17
+USR_CXXFLAGS += --std=c++17 -g
 
 # Used for code improvement purposes
 #USR_CXXFLAGS += -Wunused -Wall -Wextra -Wpedantic
@@ -19,6 +19,7 @@ USR_CXXFLAGS += --std=c++17
 # Records/Device support sources
 ek9000Support_SRCS += diag.cpp
 ek9000Support_SRCS += drvEK9000.cpp
+ek9000Support_SRCS += util.cpp
 
 ek9000Support_LIBS += $(EPICS_BASE_IOC_LIBS)
 ek9000Support_LIBS += modbus
