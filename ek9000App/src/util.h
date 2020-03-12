@@ -11,31 +11,21 @@
 
 #include <epicsAtomic.h>
 
+typedef struct 
+{
+	class drvEK9000* pdrv;
+	int slave, terminal, channel;
+	int baseaddr, len;
+} terminal_dpvt_t;
+
 namespace util
 {
 	void iocshRegister(const char* name, void(*pfn)(const iocshArgBuf*), std::initializer_list<iocshArg> args);
-
-	class epicsSpinLock
-	{
-	private:
-		int iflag;
-	public:
-		epicsSpinLock();
-		~epicsSpinLock();
-
-		/**
-		 * \brief Checks if the lock is locked or not
-		 */ 
-		bool isLocked() const;
-
-		/**
-		 * \brief Locks the spinlock
-		 */ 
-		void lock();
-
-		/**
-		 * \brief Unlocks the spinlock
-		 */ 
-		void unlock();
-	};
+	
+	/*
+	 * Parses and creates a device private structure for the terminal
+	 * instio is your instio string passed into the record's INP field.
+	 */ 
+	void* parseAndCreateDpvt(char* instio);
 }
+

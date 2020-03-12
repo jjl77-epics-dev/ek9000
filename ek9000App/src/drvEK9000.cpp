@@ -1,3 +1,10 @@
+/*
+ *
+ *	drvEK9000.cpp
+ *
+ * Implementation of simple EK9K driver code
+ *
+ */ 
 #include <drvModbusAsyn.h>
 #include <drvAsynIPPort.h>
 #include <asynPortDriver.h>
@@ -13,86 +20,19 @@
 #include <epicsAtomic.h>
 #include <epicsThread.h>
 #include <epicsSpin.h>
+#include <epicsTime.h>
+#include <epicsStdlib.h>
+#include <time.h>
+#include <queue>
 
 #include "drvEK9000.h"
 #include "util.h"
-
-#define INPUT_PDO_START 	0x1
-#define OUTPUT_PDO_START 	0x800
-#define INPUT_COIL_START 	0x0
-#define OUTPUT_COIL_START 	0x0
-
-#define INPUT_REG_SIZE		0xFF
-#define OUTPUT_REG_SIZE		0xFF
-#define INPUT_BIT_SIZE		0xFF
-#define OUTPUT_BIT_SIZE		0xFF 
-
-/*
- *	drvEK9000
- *
- * This is a simple driver for the EK9000 bus coupler
- * This class itself is just tasked with reading all of the registers from the device
- * quickly. Device drivers then atomically read register values from the exposed 
- * PDOs. Mutex locking is minimal here.
- *
- */ 
-class drvEK9000 : public drvModbusAsyn
-{
-private:
-
-
-public:
-	drvEK9000(const char* port, const char* ipport, const char* ip);
-	~drvEK9000();
-
-	void PopulateSlaveList();
-	void StartPollThread();
-	
-	/*
-	 * Enqueues a CoE IO request with the driver
-	 * this can be requested to be "immediate" or not
-	 * The pfnCallback 
-	 * Requests are served in the order in which they're enqueued; 
-	 */ 
-	void RequestCoEIO(coe_req_t req, bool immediate=false);
-	void RequestCoEIO(coe_req_t* req, int nreq, bool immediate=false);
-
-	static void PollThreadFunc(void* lparam);
-
-	const char* port, *ipport, *ip;
-
-	/* Input/Output pdo sizes */
-	int outputBytes, inputBytes, inputBits, outputBits;
-
-	/* Register spaces */
-	uint16_t inputPDO[INPUT_REG_SIZE];
-	uint16_t outputPDO[OUTPUT_REG_SIZE];
-	bool inputBitPDO[INPUT_BIT_SIZE];
-	bool outputBitPDO[OUTPUT_BIT_SIZE];
-
-	/* Register swap spaces */
-	/* These spaces will be sent over the wire, and should not be touched 
-	 * by any device code. They are temporary holding buffers */
-	uint16_t inputSwapSpace[INPUT_REG_SIZE];
-	uint16_t outputSwapSpace[OUTPUT_REG_SIZE];
-	uint16_t inputBitSwap[INPUT_BIT_SIZE];
-	uint16_t outputBitSwap[OUTPUT_BIT_SIZE];
-
-	/* Mutex for swapping of input/output spaces */
-	/* Ideally a spinlock is used here since we're only going to be locking for a couple us */
-	epicsSpinId swapMutex;
-	 
-	/* Polling thread handle */
-	epicsThreadId pollThread;
-
-	/* Poll period, we sleep for this many seconds */
-	double pollPeriod;
-};
 
 drvEK9000::drvEK9000(const char* port, const char* ipport, const char* ip) :
 	drvModbusAsyn(port, ipport, 0, 2, -1, 65535, dataTypeUInt16, 0, "")
 {
 	this->swapMutex = epicsSpinCreate();
+	this->coeMutex = epicsSpinCreate();
 }
 
 void drvEK9000::StartPollThread()
@@ -106,14 +46,32 @@ void drvEK9000::StartPollThread()
 
 void drvEK9000::PollThreadFunc(void* lparam)
 {
+	const char* function = "drvEK9000::PollThreadFunc";
+	const char* step = "ReadInputRegisters";
 	while(1)
 	{
 		drvEK9000* _this = (drvEK9000*)lparam;
 		bool oreg = false, obit = false;
-	
+		float dt, coe_dt;
+
+		/* compute the change in time */
+		dt = ((clock()) / (CLOCKS_PER_SEC)/1000.0f) - _this->prevTime;
+
+		/* Check the time change to make sure we have not possibly missed a poll period */
+		if(dt > _this->pollPeriod * 1000.0f)
+		{
+			asynPrint(_this->pasynUserSelf, ASYN_TRACE_WARNING, "%s:%s: Total time between poll calls exceeds poll period! dt=%f, period=%f",
+					function, step, dt, (_this->pollPeriod*1000.0f));
+		}
+
+		asynPrint(_this->pasynUserSelf, ASYN_TRACE_FLOW, "%s: %s\n", function, step);
+
 		/* In order to reduce the number of mutex locks for the swap space mutex, let's read input data now rather than later */
 		_this->doModbusIO(0, MODBUS_READ_INPUT_REGISTERS, INPUT_PDO_START, _this->inputSwapSpace, 0xFF);
 		_this->doModbusIO(0, MODBUS_READ_DISCRETE_INPUTS, INPUT_COIL_START, _this->inputBitSwap, 0xFF);
+
+		step = "SwapRegisters";
+		asynPrint(_this->pasynUserSelf, ASYN_TRACE_FLOW, "%s: %s\n", function, step);
 
 		/* Compare our output swap spaces */
 		epicsSpinLock(_this->swapMutex);
@@ -134,12 +92,94 @@ void drvEK9000::PollThreadFunc(void* lparam)
 		/* Unlock the swap guard */
 		epicsSpinUnlock(_this->swapMutex);
 		
+		step = "WriteOutputRegisters";
+		asynPrint(_this->pasynUserSelf, ASYN_TRACE_FLOW, "%s: %s\n", function, step);
+		
 		/* Finally perform the actual IO */
 		_this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, OUTPUT_PDO_START, _this->outputSwapSpace, OUTPUT_REG_SIZE);
 		_this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_COILS, OUTPUT_COIL_START, _this->outputBitSwap, OUTPUT_BIT_SIZE);
-	
-		/* Sleep for the poll period */
-		epicsThreadSleep(_this->pollPeriod);
+
+		/* Set the last time */
+		_this->prevTime = (clock()) / (CLOCKS_PER_SEC/1000.0f);
+
+		step = "DoCoEIO";
+		asynPrint(_this->pasynUserSelf, ASYN_TRACE_FLOW, "%s: %s\n", function, step);
+
+		/* Here we will handle all of the CoE IO requests, as many as possible at least */
+		/* The internal CoE IO function will return a delta t for how long the request took, 
+		 * so we can ensure we don't miss any polling periods */
+		coe_dt = 0.0f;
+		while(1)
+		{
+			coe_req_t req;
+			int coe_dt;
+			
+			/* C++ containers are not thread safe :( */
+			epicsSpinLock(_this->coeMutex);
+			/* Nothing to do ?? */
+			if(_this->coeRequests.size() <= 0) break;
+			req = _this->coeRequests.front();
+			_this->coeRequests.pop_front();
+			epicsSpinLock(_this->coeMutex);
+			
+			/* Perform the IO & compute the total delta t */
+			coe_dt += _this->doCoEIO(req);
+
+			/* In the event of us running over the poll period, do not sleep, just poll! */
+			if(coe_dt >= (_this->pollPeriod * 1000.0f))
+			{
+				asynPrint(_this->pasynUserSelf, ASYN_TRACE_WARNING, "%s: %s: Poll period exceeded for missed due to CoE requests or other latency! coe_dt=%d\n", 
+						function, step, coe_dt);
+				continue;
+			}
+
+			/* If within 10ms of the next poll period, it's cutting it kinda close */
+			if(coe_dt >= (_this->pollPeriod * 1000.0f - 10.0f))
+				break;
+		}
+
+		/* Sleep for the poll period minus the dt */
+		epicsThreadSleep(_this->pollPeriod - coe_dt);
+	}
+}
+
+void drvEK9000::DumpInfo()
+{
+}
+
+void drvEK9000::RequestCoEIO(coe_req_t req, bool immediate)
+{
+	epicsSpinLock(this->coeMutex);
+	if(immediate)
+		this->coeRequests.push_front(req);
+	else
+		this->coeRequests.push_back(req);
+	epicsSpinUnlock(this->coeMutex);
+}
+
+void drvEK9000::RequestCoEIO(coe_req_t* req, int nreq, bool immediate)
+{
+	epicsSpinLock(this->coeMutex);
+	for(int i = 0; i < nreq; i++)
+	{
+		if(immediate)
+			this->coeRequests.push_front(req[i]);
+		else
+			this->coeRequests.push_back(req[i]);
+	}
+	epicsSpinUnlock(this->coeMutex);
+}
+
+int drvEK9000::doCoEIO(coe_req_t req)
+{
+	/* Read = 0 */
+	if(req.type == 0)
+	{
+
+	}
+	else
+	{
+
 	}
 }
 

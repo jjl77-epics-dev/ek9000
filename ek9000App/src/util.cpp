@@ -8,6 +8,8 @@
 #include <memory.h>
 #include <stdlib.h>
 #include <vector>
+#include <epicsPrint.h>
+#include <epicsStdio.h>
 
 using namespace util;
 
@@ -37,28 +39,22 @@ void util::iocshRegister(const char* name, void(*pfn)(const iocshArgBuf*), std::
 	functions.push_back(handle);
 }
 
-epicsSpinLock::epicsSpinLock() :
-	iflag(0)
+/*
+ * @ek9k_name,slave_num,channel
+ */ 
+void* util::parseAndCreateDpvt(char* instio)
 {
+	if(!instio) return nullptr;
+	int pindex = 0;
+	
+	for(char* subst = strtok(instio, ","); subst; subst = strtok(NULL, ","), pindex++)
+	{
 
-}
+	}
 
-epicsSpinLock::~epicsSpinLock()
-{
-
-}
-
-bool epicsSpinLock::isLocked() const
-{
-	return (epicsAtomicGetIntT(&this->iflag) != 0);
-}
-
-void epicsSpinLock::lock()
-{
-	while(epicsAtomicCmpAndSwapIntT(&this->iflag, 0, 1) != 0) {};
-}
-
-void epicsSpinLock::unlock()
-{
-	epicsAtomicSetIntT(&this->iflag, 0);
+	if(pindex < 2)
+	{
+		epicsStdoutPrintf("Syntax error in instio string: %s\n", instio);
+		return nullptr;
+	}
 }

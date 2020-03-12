@@ -4,6 +4,11 @@
  *
  * Driver for the EK9000 EtherCAT to Modbus coupler
  *
+ *
+ * General Info:
+ *
+ * --- INSTIO STRING FORMAT ---
+ *  	@ek9k_name,slave_num,channel_num
  */ 
 #pragma once
 
@@ -13,6 +18,8 @@
 #include <epicsStdlib.h>
 #include <epicsMutex.h>
 #include <epicsTypes.h>
+#include <epicsSpin.h>
+#include <deque>
 
 /* Common EK9000 registers */
 #define STATUS_REGISTER_BASE 	0x1000 
@@ -53,6 +60,24 @@
 #define REG_DATA_START			0x1406
 #define REG_DATA_END 			0x14FF 
 
+#define INPUT_PDO_START 		0x1
+#define OUTPUT_PDO_START 		0x800
+#define INPUT_COIL_START 		0x0
+#define OUTPUT_COIL_START	 	0x0
+
+#define INPUT_REG_SIZE			0xFF
+#define OUTPUT_REG_SIZE			0xFF
+#define INPUT_BIT_SIZE			0xFF
+#define OUTPUT_BIT_SIZE			0xFF 
+
+#define EK9K_EXEC_BIT 			0x1
+#define EK9K_ERROR_BIT			0x100
+#define EK9K_BUSY_BIT			0x200
+#define EK9K_DONE_BIT			0x400
+
+#define EK9K_TERMINAL_NUM_MASK	0x4FFF
+#define EK9K_WRITE_MASK			0x8000
+
 typedef struct
 {
 	int length;
@@ -60,9 +85,27 @@ typedef struct
 	int adserr;
 } coe_resp_t;
 
+#define COE_REQ_READ 0
+#define COE_REQ_WRITE 1
+
+/**
+ *
+ * Example read request:
+ * 	coe_req_t req = {
+ *		.index = 0x8010,
+ *		.subindex = 0x20,
+ *		.length = 4,
+ *		.type = COE_REQ_READ,
+ *		.pdata = mybuffer,
+ *		.pfnCallback = mycallback,
+ *		.pvt = NULL,
+ * 	};
+ * 	ek9000->RequestCoEIO(req);
+ *
+ */ 
 typedef struct
 {
-	int subindex, index, length;
+	int subindex, index, length, type;
 
 	/*
 	 * This pointer will be reused in the response for any returned
@@ -78,4 +121,81 @@ typedef struct
 	/* pvt is private data you can attach to this for the callback */
 	void* pvt;
 } coe_req_t;
+
+
+/*
+ *	drvEK9000
+ *
+ * This is a simple driver for the EK9000 bus coupler
+ * This class itself is just tasked with reading all of the registers from the device
+ * quickly. Device drivers then atomically read register values from the exposed 
+ * PDOs. Mutex locking is minimal here.
+ *
+ */ 
+class drvEK9000 : public drvModbusAsyn
+{
+private:
+	/* Internal function for CoE IO execution
+	 * Returns the time taken for the request in ms */
+	int doCoEIO(coe_req_t req);
+
+public:
+	drvEK9000(const char* port, const char* ipport, const char* ip);
+	~drvEK9000();
+
+	void PopulateSlaveList();
+	void StartPollThread();
+	
+	/*
+	 * Enqueues a CoE IO request with the driver
+	 * this can be requested to be "immediate" or not
+	 * The pfnCallback 
+	 * Requests are served in the order in which they're enqueued; 
+	 */ 
+	void RequestCoEIO(coe_req_t req, bool immediate=false);
+	void RequestCoEIO(coe_req_t* req, int nreq, bool immediate=false);
+
+	static void PollThreadFunc(void* lparam);
+
+	/* Basic info functions */
+	void DumpInfo();
+
+public:
+	const char* port, *ipport, *ip;
+
+	/* Queue of all the CoE IO requests, guarded by mutex */
+	std::deque<coe_req_t> coeRequests;
+	epicsSpinId coeMutex;
+
+	/* Input/Output pdo sizes */
+	int outputBytes, inputBytes, inputBits, outputBits;
+
+	/* Register spaces */
+	uint16_t inputPDO[INPUT_REG_SIZE];
+	uint16_t outputPDO[OUTPUT_REG_SIZE];
+	bool inputBitPDO[INPUT_BIT_SIZE];
+	bool outputBitPDO[OUTPUT_BIT_SIZE];
+
+	/* Register swap spaces */
+	/* These spaces will be sent over the wire, and should not be touched 
+	 * by any device code. They are temporary holding buffers */
+	uint16_t inputSwapSpace[INPUT_REG_SIZE];
+	uint16_t outputSwapSpace[OUTPUT_REG_SIZE];
+	uint16_t inputBitSwap[INPUT_BIT_SIZE];
+	uint16_t outputBitSwap[OUTPUT_BIT_SIZE];
+
+	/* Mutex for swapping of input/output spaces */
+	/* Ideally a spinlock is used here since we're only going to be locking for a couple us */
+	epicsSpinId swapMutex;
+	 
+	/* Polling thread handle */
+	epicsThreadId pollThread;
+
+	/* Poll period, we sleep for this many seconds */
+	double pollPeriod;
+
+	/* Previous time of last poll, in ms */
+	double prevTime;
+};
+
 
