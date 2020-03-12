@@ -25,6 +25,30 @@
 #define INPUT_BIT_SIZE		0xFF
 #define OUTPUT_BIT_SIZE		0xFF 
 
+typedef struct
+{
+	int length;
+	uint16_t* pdata;
+	int adserr;
+} coe_resp_t;
+
+typedef struct
+{
+	int subindex, index, length;
+
+	/*
+	 * This pointer will be reused in the response for any returned
+	 * data
+	 */ 
+	uint16_t* pdata;
+
+	/*
+	 * Pointer to callback for completion
+	 */ 
+	void(*pfnCallback)(coe_resp_t);
+} coe_req_t;
+
+
 /*
  *	drvEK9000
  *
@@ -45,6 +69,15 @@ public:
 
 	void PopulateSlaveList();
 	void StartPollThread();
+	
+	/*
+	 * Enqueues a CoE IO request with the driver
+	 * this can be requested to be "immediate" or not
+	 * The pfnCallback 
+	 * Requests are served in the order in which they're enqueued; 
+	 */ 
+	void RequestCoEIO(coe_req_t req, bool immediate=false);
+	void RequestCoEIO(coe_req_t* req, int nreq, bool immediate=false);
 
 	static void PollThreadFunc(void* lparam);
 
@@ -65,14 +98,26 @@ public:
 	uint16_t outputBitSwap[OUTPUT_BIT_SIZE];
 
 	/* Mutex for swapping of input/output spaces */
+	/*  */
+#ifdef TEST_USE_SPINLOCK
+	util::epicsSpinLock swapMutex;
+#else 
 	epicsMutexId swapMutex;
-
+#endif
+	 
 	/* Polling thread handle */
 	epicsThreadId pollThread;
 
 	/* Poll period, we sleep for this many seconds */
 	double pollPeriod;
 };
+
+drvEK9000::drvEK9000(const char* port, const char* ipport, const char* ip)
+{
+#ifndef TEST_USE_SPINLOCK
+	this->swapMutex = epicsMutexCreate();
+#endif 
+}
 
 void drvEK9000::StartPollThread()
 {
@@ -96,7 +141,12 @@ void drvEK9000::PollThreadFunc(void* lparam)
 		_this->doModbusIO(0, MODBUS_READ_DISCRETE_INPUTS, INPUT_COIL_START, _this->inputBitSwap, 0xFF);
 
 		/* Compare our output swap spaces */
+#ifdef TEST_USE_SPINLOCK
+		this->swapMutex->lock();
+		lockstat = epicsMutexLockOK;
+#else 
 		lockstat = epicsMutexLock(_this->swapMutex);
+#endif 
 		if(!lockstat)
 		{
 			asynPrint(_this->pasynUserSelf, ASYN_TRACE_ERROR, "%s: POLLTHREAD: Failed to lock swap mutex!\n",
@@ -118,7 +168,11 @@ void drvEK9000::PollThreadFunc(void* lparam)
 			memcpy(_this->inputPDO, _this->inputSwapSpace, INPUT_REG_SIZE * sizeof(uint16_t));
 			memcpy(_this->inputBitPDO, _this->inputBitSwap, INPUT_BIT_SIZE * sizeof(uint16_t));
 			/* Unlock the swap guard */
+#ifdef TEST_USE_SPINLOCK
+			this->swapMutex->unlock();
+#else 
 			epicsMutexUnlock(_this->swapMutex);
+#endif 
 		}
 		/* Finally perform the actual IO */
 		_this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, OUTPUT_PDO_START, _this->outputSwapSpace, OUTPUT_REG_SIZE);
