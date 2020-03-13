@@ -204,6 +204,7 @@ void drvEK9000::RequestCoEIO(coe_req_t* req, int nreq, bool immediate)
 
 int drvEK9000::doCoEIO(coe_req_t req)
 {
+
 	/* Read = 0 */
 	if(req.type == 0)
 	{
@@ -212,7 +213,18 @@ int drvEK9000::doCoEIO(coe_req_t req)
 	/* Write = 1 */
 	else
 	{
-
+		uint16_t data[0xFF] = {
+			(uint16_t)0x8000,
+			(uint16_t)req.termid,
+			(uint16_t)req.index,
+			(uint16_t)req.subindex,
+			(uint16_t)req.length,
+		};
+		memcpy(&data[5], req.pdata, req.length);
+		this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, REG_0x1400, data, (5 * sizeof(uint16_t)) + (req.length / 2 + 1));
+	
+		/* Call the callback */
+		if(req.pfnCallback) req.pfnCallback(req.pvt, coe_resp_t());
 	}
 }
 

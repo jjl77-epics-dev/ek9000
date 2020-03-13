@@ -105,7 +105,7 @@ typedef struct
  */ 
 typedef struct
 {
-	int subindex, index, length, type;
+	int subindex, index, length, type, termid;
 
 	/*
 	 * This pointer will be reused in the response for any returned
