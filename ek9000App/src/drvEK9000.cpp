@@ -143,6 +143,35 @@ void drvEK9000::PollThreadFunc(void* lparam)
 	}
 }
 
+/* Atomically read a register,
+ * type 0 = bo, 1 = bi, 2 = ao, 3 = ai */
+uint16_t drvEK9000::ReadRegisterAtomic(int addr, int type)
+{
+	union {
+		int v;
+		uint16_t i16[2];
+	} ret;
+
+	switch(type)
+	{
+		case 0: 
+			ret.v = epicsAtomicGetIntT((int*)&this->outputBitPDO[addr]);
+			break;
+		case 1:
+			ret.v = epicsAtomicGetIntT((int*)&this->inputBitPDO[addr]);
+			break;
+		case 2:
+			addr -= (0x800-1);
+			ret.v = epicsAtomicGetIntT((int*)&this->outputPDO[addr]);
+			break;
+		case 3:
+			ret.v = epicsAtomicGetIntT((int*)&this->inputPDO[addr]);
+			break;
+		default: break;
+	}
+	return ret.i16[0];
+}
+
 void drvEK9000::DumpInfo()
 {
 }

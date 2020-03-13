@@ -155,6 +155,10 @@ public:
 	void RequestCoEIO(coe_req_t req, bool immediate=false);
 	void RequestCoEIO(coe_req_t* req, int nreq, bool immediate=false);
 
+	/* Atomically read a register,
+	 * type 0 = bo, 1 = bi, 2 = ao, 3 = ai */
+	uint16_t ReadRegisterAtomic(int addr, int type);
+
 	static void PollThreadFunc(void* lparam);
 
 	/* Basic info functions */
