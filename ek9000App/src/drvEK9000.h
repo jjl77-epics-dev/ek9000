@@ -140,7 +140,7 @@ private:
 	int doCoEIO(coe_req_t req);
 
 public:
-	drvEK9000(const char* port, const char* ipport, const char* ip);
+	drvEK9000(const char* name, const char* port, const char* ipport, const char* ip);
 	~drvEK9000();
 
 	void PopulateSlaveList();
@@ -165,7 +165,7 @@ public:
 	void DumpInfo();
 
 public:
-	const char* port, *ipport, *ip;
+	const char* port, *ipport, *ip, *name;
 
 	/* Queue of all the CoE IO requests, guarded by mutex */
 	std::deque<coe_req_t> coeRequests;

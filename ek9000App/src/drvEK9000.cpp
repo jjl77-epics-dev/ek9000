@@ -28,8 +28,11 @@
 #include "drvEK9000.h"
 #include "util.h"
 
-drvEK9000::drvEK9000(const char* port, const char* ipport, const char* ip) :
-	drvModbusAsyn(port, ipport, 0, 2, -1, 65535, dataTypeUInt16, 0, "")
+std::vector<drvEK9000*> devices;
+
+drvEK9000::drvEK9000(const char* ek, const char* port, const char* ipport, const char* ip) :
+	drvModbusAsyn(port, ipport, 0, 2, -1, 65535, dataTypeUInt16, 0, ""),
+	name(ek)
 {
 	this->swapMutex = epicsSpinCreate();
 	this->coeMutex = epicsSpinCreate();
@@ -214,7 +217,30 @@ int drvEK9000::doCoEIO(coe_req_t req)
 }
 
 void ek9000Register(const iocshArgBuf* args)
-{	
+{
+	const char* ek9k = args[0].sval;
+	const char* port = args[1].sval;
+	const char* ip = args[2].sval;
+
+	/* Check if already registered */
+	for(auto x : devices)
+	{
+		if(strcmp(x->name, ek9k) == 0)
+		{
+			epicsStdoutPrintf("Device %s already registered.\n", ek9k);
+			return;
+		}
+	}
+
+	/* Create the octet port name */
+	char octetport[1024]; 
+	snprintf(octetport, 1024, "%s_OCTETPORT", port);
+
+	/* Configure IP port and create EK9K */
+	drvAsynIPPortConfigure(octetport, ip, 0, 0, 0);
+	auto ek = new drvEK9000(ek9k, port, octetport, ip);
+
+	devices.push_back(ek);
 }
 
 void ek9000AddTerminal(const iocshArgBuf* args)
