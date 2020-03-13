@@ -206,6 +206,7 @@ int drvEK9000::doCoEIO(coe_req_t req)
 	{
 
 	}
+	/* Write = 1 */
 	else
 	{
 
