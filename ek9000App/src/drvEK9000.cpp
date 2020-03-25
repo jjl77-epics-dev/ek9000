@@ -30,6 +30,9 @@
 
 std::vector<drvEK9000*> devices;
 
+/* Quick conversion macro to convert from bytes to modbus registers */
+#define BYTES_TO_REG(x) (((x) % 2) == 0 ? (x) / 2 : ((x) / 2) + 1)
+
 drvEK9000::drvEK9000(const char* ek, const char* port, const char* ipport, const char* ip) :
 	drvModbusAsyn(port, ipport, 0, 2, -1, 65535, dataTypeUInt16, 0, ""),
 	name(ek)
@@ -347,34 +350,12 @@ void drvEK9000::RequestCoEIO(coe_req_t* req, int nreq, bool immediate)
 	epicsSpinUnlock(this->coeMutex);
 }
 
-int drvEK9000::doCoEIO(coe_req_t req)
+/**
+ * Basically just rips a coe_req_t structure apart
+ */ 
+bool drvEK9000::doCoEIO(coe_req_t req)
 {
-
-	/* Read = 0 */
-	if(req.type == 0)
-	{
-
-	}
-	/* Write = 1 */
-	else
-	{
-		uint16_t data[0xFF] = {
-			(uint16_t)0x8000, /* 0x8000 sets the write bit */
-			(uint16_t)req.termid,
-			(uint16_t)req.index,
-			(uint16_t)req.subindex,
-			(uint16_t)req.length,
-		};
-
-		/* Copy into the data buffer, starting at index 5 */
-		memcpy(&data[5], req.pdata, req.length);
-
-		/* Actually do the IO */
-		this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, REG_0x1400, data, (5 * sizeof(uint16_t)) + (req.length / 2 + 1));
-	
-		/* Call the callback */
-		if(req.pfnCallback) req.pfnCallback(req.pvt, coe_resp_t());
-	}
+	return this->doCoEIO(req.type == COE_REQ_WRITE, req.termid, req.index, req.subindex, BYTES_TO_REG(req.length), req.pdata);
 }
 
 void ek9000Register(const iocshArgBuf* args)

@@ -108,6 +108,7 @@ typedef struct
  */ 
 typedef struct
 {
+	/* Length is in registers */
 	int subindex, index, length, type, termid;
 
 	/*
@@ -154,7 +155,7 @@ class drvEK9000 : public drvModbusAsyn
 private:
 	/* Internal function for CoE IO execution
 	 * Returns the time taken for the request in ms */
-	int doCoEIO(coe_req_t req);
+	bool doCoEIO(coe_req_t req);
 
 public:
 	drvEK9000(const char* name, const char* port, const char* ipport, const char* ip);
