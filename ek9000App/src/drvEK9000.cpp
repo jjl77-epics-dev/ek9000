@@ -54,6 +54,7 @@ void drvEK9000::PollThreadFunc(void* lparam)
 	while(1)
 	{
 		drvEK9000* _this = (drvEK9000*)lparam;
+		asynStatus status;
 		bool oreg = false, obit = false;
 		float dt, coe_dt;
 
@@ -70,28 +71,34 @@ void drvEK9000::PollThreadFunc(void* lparam)
 		asynPrint(_this->pasynUserSelf, ASYN_TRACE_FLOW, "%s: %s\n", function, step);
 
 		/* In order to reduce the number of mutex locks for the swap space mutex, let's read input data now rather than later */
-		_this->doModbusIO(0, MODBUS_READ_INPUT_REGISTERS, INPUT_PDO_START, _this->inputSwapSpace, 0xFF);
-		_this->doModbusIO(0, MODBUS_READ_DISCRETE_INPUTS, INPUT_COIL_START, _this->inputBitSwap, 0xFF);
+		status = _this->doModbusIO(0, MODBUS_READ_INPUT_REGISTERS, INPUT_PDO_START, _this->inputSwapSpace, 0xFF); /* Copy 0xFF bytes (the size of the PDO) */
+		status = _this->doModbusIO(0, MODBUS_READ_DISCRETE_INPUTS, INPUT_COIL_START, _this->inputBitSwap, 0xFF);  /* Copy 0xFF bytes (the size of the PDO) */
 
+		/* Trace the flow of the program */
 		step = "SwapRegisters";
 		asynPrint(_this->pasynUserSelf, ASYN_TRACE_FLOW, "%s: %s\n", function, step);
 
 		/* Compare our output swap spaces */
 		epicsSpinLock(_this->swapMutex);
 
+		/* Compare the output PDO and output swap space, and copy it over if they don't match */
 		if(memcmp(_this->outputPDO, _this->outputSwapSpace, OUTPUT_REG_SIZE * sizeof(uint16_t)) == 0)
 		{
 			oreg = true;
 			memcpy(_this->outputSwapSpace, _this->outputPDO, OUTPUT_REG_SIZE * sizeof(uint16_t));
 		}
+
+		/* Same thing as above; compare and swap output bit PDOs */
 		if(memcmp(_this->outputBitPDO, _this->outputBitSwap, OUTPUT_BIT_SIZE * sizeof(uint16_t)) == 0)
 		{
 			obit = false;
 			memcpy(_this->outputBitSwap, _this->outputBitPDO, OUTPUT_BIT_SIZE * sizeof(uint16_t));
 		}
+
 		/* For the input PDO's lets copy in the new data */
 		memcpy(_this->inputPDO, _this->inputSwapSpace, INPUT_REG_SIZE * sizeof(uint16_t));
 		memcpy(_this->inputBitPDO, _this->inputBitSwap, INPUT_BIT_SIZE * sizeof(uint16_t));
+		
 		/* Unlock the swap guard */
 		epicsSpinUnlock(_this->swapMutex);
 		
@@ -99,8 +106,8 @@ void drvEK9000::PollThreadFunc(void* lparam)
 		asynPrint(_this->pasynUserSelf, ASYN_TRACE_FLOW, "%s: %s\n", function, step);
 		
 		/* Finally perform the actual IO */
-		_this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, OUTPUT_PDO_START, _this->outputSwapSpace, OUTPUT_REG_SIZE);
-		_this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_COILS, OUTPUT_COIL_START, _this->outputBitSwap, OUTPUT_BIT_SIZE);
+		status = _this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, OUTPUT_PDO_START, _this->outputSwapSpace, OUTPUT_REG_SIZE);
+		status = _this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_COILS, OUTPUT_COIL_START, _this->outputBitSwap, OUTPUT_BIT_SIZE);
 
 		/* Set the last time */
 		_this->prevTime = (clock()) / (CLOCKS_PER_SEC/1000.0f);
@@ -112,6 +119,7 @@ void drvEK9000::PollThreadFunc(void* lparam)
 		/* The internal CoE IO function will return a delta t for how long the request took, 
 		 * so we can ensure we don't miss any polling periods */
 		coe_dt = 0.0f;
+
 		while(1)
 		{
 			coe_req_t req;
@@ -119,16 +127,21 @@ void drvEK9000::PollThreadFunc(void* lparam)
 			
 			/* C++ containers are not thread safe :( */
 			epicsSpinLock(_this->coeMutex);
+
 			/* Nothing to do ?? */
 			if(_this->coeRequests.size() <= 0) break;
+			
+			/* Get the next request in the queue */
 			req = _this->coeRequests.front();
 			_this->coeRequests.pop_front();
+			
+			/* Lock our CoE spinlock */
 			epicsSpinLock(_this->coeMutex);
 			
 			/* Perform the IO & compute the total delta t */
 			coe_dt += _this->doCoEIO(req);
 
-			/* In the event of us running over the poll period, do not sleep, just poll! */
+			/* In the event of us running over the poll period, do not sleep, just rerun the poll! */
 			if(coe_dt >= (_this->pollPeriod * 1000.0f))
 			{
 				asynPrint(_this->pasynUserSelf, ASYN_TRACE_WARNING, "%s: %s: Poll period exceeded for missed due to CoE requests or other latency! coe_dt=%d\n", 
@@ -154,44 +167,175 @@ uint16_t drvEK9000::ReadRegisterAtomic(int addr, int type)
 		int v;
 		uint16_t i16[2];
 	} ret;
+	ret.v = INT_MAX;
 
 	switch(type)
 	{
-		case 0: 
-			ret.v = epicsAtomicGetIntT((int*)&this->outputBitPDO[addr]);
-			break;
-		case 1:
-			ret.v = epicsAtomicGetIntT((int*)&this->inputBitPDO[addr]);
-			break;
+		case 0: ret.v = epicsAtomicGetIntT((int*)&this->outputBitPDO[addr]); break;
+		case 1: ret.v = epicsAtomicGetIntT((int*)&this->inputBitPDO[addr]); break;
+
+		/* For analog output records, we should subtract the start address so we don't overrun the buffer */
 		case 2:
 			addr -= (0x800-1);
 			ret.v = epicsAtomicGetIntT((int*)&this->outputPDO[addr]);
 			break;
-		case 3:
-			ret.v = epicsAtomicGetIntT((int*)&this->inputPDO[addr]);
-			break;
+		
+		case 3: ret.v = epicsAtomicGetIntT((int*)&this->inputPDO[addr]); break;
 		default: break;
 	}
 	return ret.i16[0];
+}
+
+/**
+ * Initialize terminal mappings
+ * Coupler must be connected for this to work!
+ * This must also be called from the constructor, and nowhere else,
+ * it's not thread safe
+ */ 
+void drvEK9000::MapTerminals()
+{
+	epicsUInt16 terminalids[0xFF];
+	terminal_t terminals[0xFF];
+
+	/* Starting points of PDOs */
+	int inp_start = 0x1, outp_start = 0x800, inb_start = 0, outb_start = 0;
+
+	/* Read the registers */
+	this->doModbusIO(0, MODBUS_READ_INPUT_REGISTERS, EK9K_SLAVE_MAP_REG, terminalids, 0xFF);
+
+	/* Compute locations in the input/output register space, which will only be analog terms */
+	for(int i = 0; terminalids[i] != 0 && i < 0xFF; i++)
+	{
+		const STerminalInfoConst_t* info = util::FindTerminal(terminalids[i]);
+		if(!info) continue;
+
+		/* Ignore everything less than 3k */
+		if(info->m_nID < 3000) continue;
+
+		inp_start += info->m_nInputSize;
+		outp_start += info->m_nOutputSize;
+	}
+
+	/* Do the same for the input bits */
+	for(int i = 0; terminalids[i] != 0 && i < 0xFF; i++)
+	{
+		const STerminalInfoConst_t* info = util::FindTerminal(terminalids[i]);
+		if(!info) continue;
+		if(info->m_nID >= 3000) continue;
+
+		outb_start += info->m_nOutputSize;
+		inb_start += info->m_nInputSize;
+	}
+
+
+}
+
+/**
+ * Forcefully performs CoE IO
+ * Not thread-safe
+ * rw = true means write
+ * rw = false means read
+ */ 
+bool drvEK9000::doCoEIO(bool rw, epicsUInt16 termid, epicsUInt16 index, epicsUInt16 subindex, epicsUInt16 bytesize, epicsUInt16* pbuf)
+{
+	assert(bytesize <= 250);
+	assert(pbuf != NULL);
+
+	/* Write */
+	if(rw)
+	{
+		size_t real_size = 0;
+		asynStatus status;
+		epicsUInt16 send_data[0xFF] = {
+			0x1,				/* execute */
+			termid | 0x8000,	/* Termid with bit 0x8000 set for write */
+			subindex ^ 0xFF00,	/* subindex, Clear out the high bits here as they're unused */
+			bytesize,			/* Size in bytes of transfer */
+			0					/* ADS Error code */
+		};
+		/* Copy into the send_data buffer starting with the 6th element */
+		memcpy(&send_data[5], pbuf, bytesize < 250 ? bytesize : 250);
+
+		/* Compute real size of the buffer we're going to send */
+		real_size = 5 + (bytesize/2);
+		real_size = (bytesize % 2 != 0) ? (real_size + 1) : real_size;
+
+		/* Now actually do the IO */
+		status = this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, REG_0x1400, send_data, real_size);
+
+		return status == asynSuccess;
+	}
+	/* Read */
+	else
+	{
+		asynStatus status;
+		epicsUInt16 status_reg = 0, real_size;
+		/* The initial request */
+		epicsUInt16 send_data[0xFF] = {
+			0x0,				/* just set this to zero for reads */
+			termid ^ 0x8000,	/* bit 15 must be 0 for reading */
+			index,				/* COE index */
+			subindex ^ 0xFF00,	/* Clear high 8 bits */
+			bytesize,
+			0,					/* ADS error code */
+		};
+
+		/* Write out everything */
+		status = this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, REG_0x1400, send_data, 0x5 /* Number of registers */);
+
+		/* Did not work :( */
+		if(status != asynSuccess) return false;
+
+		/* Compute real size of the buffer we're going to send */
+		real_size = 5 + (bytesize/2);
+		real_size = (bytesize % 2 != 0) ? (real_size + 1) : real_size;
+	
+		/**
+		 * Polling loop
+		 * The ek9k wants us to read 12 registers here for some reason
+		 */ 
+		do 
+		{
+			epicsThreadSleep(0.01);
+			status = this->doModbusIO(0, MODBUS_READ_HOLDING_REGISTERS, REG_0x1400, send_data, real_size);
+			
+			/* safety measure here: break if the read has failed */
+			if(status != asynSuccess) break;
+			
+			status_reg = send_data[0];
+		} while(status_reg & 0x200);
+
+		/* Failure to read if 0x10X is set */
+		if(send_data[0] & 0x100) return false;
+
+		/* Copy over read data */
+		memcpy(pbuf, &send_data[5], bytesize);
+		return true;
+	}
 }
 
 void drvEK9000::DumpInfo()
 {
 }
 
+/* Enqueues a CoE IO request, optionally putting it at the front of the queue */
 void drvEK9000::RequestCoEIO(coe_req_t req, bool immediate)
 {
 	epicsSpinLock(this->coeMutex);
+
+	/* If immediate, put before everything else */
 	if(immediate)
 		this->coeRequests.push_front(req);
 	else
 		this->coeRequests.push_back(req);
+	
 	epicsSpinUnlock(this->coeMutex);
 }
 
 void drvEK9000::RequestCoEIO(coe_req_t* req, int nreq, bool immediate)
 {
 	epicsSpinLock(this->coeMutex);
+
 	for(int i = 0; i < nreq; i++)
 	{
 		if(immediate)
@@ -199,6 +343,7 @@ void drvEK9000::RequestCoEIO(coe_req_t* req, int nreq, bool immediate)
 		else
 			this->coeRequests.push_back(req[i]);
 	}
+	
 	epicsSpinUnlock(this->coeMutex);
 }
 
@@ -214,13 +359,17 @@ int drvEK9000::doCoEIO(coe_req_t req)
 	else
 	{
 		uint16_t data[0xFF] = {
-			(uint16_t)0x8000,
+			(uint16_t)0x8000, /* 0x8000 sets the write bit */
 			(uint16_t)req.termid,
 			(uint16_t)req.index,
 			(uint16_t)req.subindex,
 			(uint16_t)req.length,
 		};
+
+		/* Copy into the data buffer, starting at index 5 */
 		memcpy(&data[5], req.pdata, req.length);
+
+		/* Actually do the IO */
 		this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, REG_0x1400, data, (5 * sizeof(uint16_t)) + (req.length / 2 + 1));
 	
 		/* Call the callback */

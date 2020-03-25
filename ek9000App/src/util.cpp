@@ -10,6 +10,8 @@
 #include <vector>
 #include <epicsPrint.h>
 #include <epicsStdio.h>
+#include <epicsTime.h>
+#include <epicsStdio.h>
 
 using namespace util;
 
@@ -57,4 +59,62 @@ void* util::parseAndCreateDpvt(char* instio)
 		epicsStdoutPrintf("Syntax error in instio string: %s\n", instio);
 		return nullptr;
 	}
+
+	int ncommas = 0;
+	size_t len = strlen(instio);
+	for(int i = 0; i < len; i++)
+	{
+		
+	}
+}
+
+const STerminalInfoConst_t* util::FindTerminal(int id)
+{
+	for(int i = 0; i < NUM_TERMINALS; i++)
+		if(g_pTerminalInfos[i]->m_nID == id) return g_pTerminalInfos[i];
+	return nullptr;
+}
+
+void util::Log(const char* fmt, ...)
+{
+	time_t clk = time(0);
+	tm _tm;
+	
+	epicsTime_localtime(&clk, &_tm);
+	epicsPrintf("%i:%i ", _tm.tm_hour, _tm.tm_min);
+	
+	va_list list;
+	va_start(list, fmt);
+	epicsVprintf(fmt, list);
+	va_end(list);
+}
+
+void util::Warn(const char* fmt, ...)
+{
+	epicsTimeStamp stmp;
+	epicsTimeGetCurrent(&stmp);
+	
+	char txt[40];
+	epicsTimeToStrftime(txt, 40, "%Y/%m/%d %H:%M:%S.%03f ", &stmp);
+	epicsPrintf("%s", txt);
+	
+	va_list list;
+	va_start(list, fmt);
+	epicsVprintf(fmt, list);
+	va_end(list);
+}
+
+void util::Error(const char* fmt, ...)
+{
+	epicsTimeStamp stmp;
+	epicsTimeGetCurrent(&stmp);
+	
+	char txt[40];
+	epicsTimeToStrftime(txt, 40, "%Y/%m/%d %H:%M:%S.%03f ", &stmp);
+	epicsPrintf("%s", txt);
+
+	va_list list;
+	va_start(list, fmt);
+	epicsVprintf(fmt, list);
+	va_end(list);
 }

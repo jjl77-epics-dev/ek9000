@@ -2,11 +2,12 @@
  *
  * pdo.h
  *
- * PDO Type definitions
+ * PDO Type definitions & PDO size determination
  *
  */ 
 #pragma once 
 
+#pragma pack(1)
 typedef struct
 {
 
@@ -51,3 +52,4 @@ typedef struct
 {
 
 } el5032_input_t;
+#pragma pack()

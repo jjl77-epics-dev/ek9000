@@ -11,6 +11,9 @@
 
 #include <epicsAtomic.h>
 
+/* List of all terminals */
+#include "terminals.h"
+
 typedef struct 
 {
 	class drvEK9000* pdrv;
@@ -27,5 +30,17 @@ namespace util
 	 * instio is your instio string passed into the record's INP field.
 	 */ 
 	void* parseAndCreateDpvt(char* instio);
+
+	/**
+	 * Look up a terminal by ID and return a structure containing info about it
+	 */ 
+	const STerminalInfoConst_t* FindTerminal(int id);
+
+	/**
+	 * Logging routines
+	 */ 
+	void Log(const char* fmt, ...);
+	void Warn(const char* fmt, ...);
+	void Error(const char* fmt, ...);
 }
 

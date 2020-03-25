@@ -50,6 +50,9 @@
 #define FIRST_STATUS_REGISTER	BUS_COUPLER_ID_REG 
 #define LAST_STATUS_REGISTER 	EBUS_CTRL_REG 
 
+/* Slave mapping register */
+#define EK9K_SLAVE_MAP_REG		0x6001
+
 /* The control registers */
 #define REG_0x1400				0x1400
 #define REG_0x1401				0x1401
@@ -122,6 +125,20 @@ typedef struct
 	void* pvt;
 } coe_req_t;
 
+/**
+ * Simple terminal structure to hold basic info about each terminal
+ * these can be accessed using a terminal index
+ */ 
+typedef struct
+{
+	int id;
+	int in_start, out_start, inb_start, outb_start;
+
+	enum {
+		AI, AO, BI, BO, ENC, MOTOR
+	} type;
+} terminal_t;
+
 
 /*
  *	drvEK9000
@@ -143,8 +160,24 @@ public:
 	drvEK9000(const char* name, const char* port, const char* ipport, const char* ip);
 	~drvEK9000();
 
+	/**
+	 * called to map terminals 
+	 * coupler must be connected in order for this to work
+	 */ 
+	void MapTerminals();
+
 	void PopulateSlaveList();
 	void StartPollThread();
+
+	/** 
+	 * Forcefully performs CoE IO
+	 * Not thread-safe
+	 * rw = true means write
+	 * rw = false means read
+	 * bytesize is the size in bytes of the read/write payload
+	 * pbuf should point to a VALID buffer to either receive or write data. It's size should == bytesize. Be careful of buffer overruns
+	 */ 
+	bool doCoEIO(bool rw, epicsUInt16 termid, epicsUInt16 index, epicsUInt16 subindex, epicsUInt16 bytesize, epicsUInt16* pbuf);
 	
 	/*
 	 * Enqueues a CoE IO request with the driver
