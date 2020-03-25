@@ -139,7 +139,7 @@ void drvEK9000::PollThreadFunc(void* lparam)
 			_this->coeRequests.pop_front();
 			
 			/* Lock our CoE spinlock */
-			epicsSpinLock(_this->coeMutex);
+			epicsSpinUnlock(_this->coeMutex);
 			
 			/* Perform the IO & compute the total delta t */
 			coe_dt += _this->doCoEIO(req);
