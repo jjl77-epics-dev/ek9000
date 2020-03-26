@@ -147,9 +147,9 @@ void drvEK9000::PollThreadFunc(void* lparam)
 			/* In the event of us running over the poll period, do not sleep, just rerun the poll! */
 			if(coe_dt >= (_this->pollPeriod * 1000.0f))
 			{
-				asynPrint(_this->pasynUserSelf, ASYN_TRACE_WARNING, "%s: %s: Poll period exceeded for missed due to CoE requests or other latency! coe_dt=%d\n", 
+				asynPrint(_this->pasynUserSelf, ASYN_TRACE_WARNING, "%s: %s: Poll period exceeded for missed due to CoE requests or other latency. coe_dt=%d\n", 
 						function, step, coe_dt);
-				continue;
+				break;
 			}
 
 			/* If within 10ms of the next poll period, it's cutting it kinda close */
