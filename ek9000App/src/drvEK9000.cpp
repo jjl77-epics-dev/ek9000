@@ -215,8 +215,20 @@ void drvEK9000::MapTerminals()
 		/* Ignore everything less than 3k */
 		if(info->m_nID < 3000) continue;
 
+		/* Set the terminal info */
+		terminals[i].in_start = inp_start;
+		terminals[i].out_start = outp_start;
+		terminals[i].id = terminalids[i];
+
+		/* Determine the type */
+		if(terminalids[i] >= 3000 && terminalids[i] < 4000) terminals[i].type = terminal_t::AI;
+		if(terminalids[i] >= 4000 && terminalids[i] < 5000) terminals[i].type = terminal_t::AO;
+		if(terminalids[i] >= 1000 && terminalids[i] < 2000) terminals[i].type = terminal_t::BI;
+		if(terminalids[i] >= 2000 && terminalids[i] < 3000) terminals[i].type = terminal_t::BO;
+
 		inp_start += info->m_nInputSize;
 		outp_start += info->m_nOutputSize;
+
 	}
 
 	/* Do the same for the input bits */

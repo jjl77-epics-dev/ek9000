@@ -152,7 +152,7 @@ typedef struct
  */ 
 class drvEK9000 : public drvModbusAsyn
 {
-private:
+protected:
 	/* Internal function for CoE IO execution
 	 * Returns the time taken for the request in ms */
 	bool doCoEIO(coe_req_t req);
@@ -234,6 +234,13 @@ public:
 
 	/* Previous time of last poll, in ms */
 	double prevTime;
+
+	/**
+	 * Internal list of terminals
+	 * you will be able to get info about each terminal mapping here.
+	 * These are statically allocated because we've only got a max of 255 terminals
+	 */ 
+	terminal_t terminals[0xFF];
 };
 
 
