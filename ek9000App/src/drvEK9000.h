@@ -134,6 +134,7 @@ typedef struct
 {
 	int id;
 	int in_start, out_start, inb_start, outb_start;
+	int in_size, out_size, inb_size, outb_size;
 
 	enum {
 		AI, AO, BI, BO, ENC, MOTOR
@@ -195,8 +196,13 @@ public:
 
 	static void PollThreadFunc(void* lparam);
 
-	/* Basic info functions */
+	/**
+	 * DumpXXX functions are used to print debugging info to the ioc console
+	 */ 
+	void DumpTerminalMapping();
+	void DumpStats();
 	void DumpInfo();
+	void DumpEverything();
 
 public:
 	const char* port, *ipport, *ip, *name;
@@ -208,11 +214,16 @@ public:
 	/* Input/Output pdo sizes */
 	int outputBytes, inputBytes, inputBits, outputBits;
 
-	/* Register spaces */
+	/* Input/output register space */
 	uint16_t inputPDO[INPUT_REG_SIZE];
 	uint16_t outputPDO[OUTPUT_REG_SIZE];
+
+	/* Input/output bit register space */
 	bool inputBitPDO[INPUT_BIT_SIZE];
 	bool outputBitPDO[OUTPUT_BIT_SIZE];
+
+	/* Status register space */
+	epicsUInt16 statusRegisters[LAST_STATUS_REGISTER-FIRST_STATUS_REGISTER];
 
 	/* Register swap spaces */
 	/* These spaces will be sent over the wire, and should not be touched 
@@ -241,6 +252,7 @@ public:
 	 * These are statically allocated because we've only got a max of 255 terminals
 	 */ 
 	terminal_t terminals[0xFF];
+	int num_terminals;
 };
 
 

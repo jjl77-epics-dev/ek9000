@@ -56,7 +56,7 @@ void* util::parseAndCreateDpvt(char* instio)
 
 	if(pindex < 2)
 	{
-		epicsStdoutPrintf("Syntax error in instio string: %s\n", instio);
+		epicsPrintf("Syntax error in instio string: %s\n", instio);
 		return nullptr;
 	}
 

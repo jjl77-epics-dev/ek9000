@@ -5,24 +5,32 @@
  * Implementation of simple EK9K driver code
  *
  */ 
-#include <drvModbusAsyn.h>
-#include <drvAsynIPPort.h>
-#include <asynPortDriver.h>
-#include <modbus.h>
-#include <modbusInterpose.h>
-#include <asynOctetSyncIO.h>
-#include <epicsExport.h>
-#include <iocsh.h>
-#include <epicsString.h> 
-#include <asynPortClient.h>
-#include <asynInt32.h>
-#include <unordered_map>
+/* EPICS includes */
 #include <epicsAtomic.h>
 #include <epicsThread.h>
 #include <epicsSpin.h>
 #include <epicsTime.h>
 #include <epicsStdlib.h>
+#include <epicsPrint.h>
+#include <epicsString.h>
+#include <epicsExport.h>
+#include <iocsh.h>
+
+/* Modbus includes */
+#include <drvModbusAsyn.h>
+#include <modbus.h>
+#include <modbusInterpose.h>
+
+/* Asyn includes */
+#include <asynInt32.h>
+#include <asynPortClient.h>
+#include <asynOctetSyncIO.h>
+#include <asynPortDriver.h>
+#include <drvAsynIPPort.h>
+
+/* STL Includes */
 #include <time.h>
+#include <unordered_map>
 #include <queue>
 
 #include "drvEK9000.h"
@@ -212,13 +220,13 @@ void drvEK9000::MapTerminals()
 		const STerminalInfoConst_t* info = util::FindTerminal(terminalids[i]);
 		if(!info) continue;
 
-		/* Ignore everything less than 3k */
-		if(info->m_nID < 3000) continue;
+		++this->num_terminals;
 
 		/* Set the terminal info */
 		terminals[i].in_start = inp_start;
 		terminals[i].out_start = outp_start;
 		terminals[i].id = terminalids[i];
+		terminals[i].in_size = terminals[i].out_size = terminals[i].inb_size = terminals[i].outb_size = 0;
 
 		/* Determine the type */
 		if(terminalids[i] >= 3000 && terminalids[i] < 4000) terminals[i].type = terminal_t::AI;
@@ -226,9 +234,29 @@ void drvEK9000::MapTerminals()
 		if(terminalids[i] >= 1000 && terminalids[i] < 2000) terminals[i].type = terminal_t::BI;
 		if(terminalids[i] >= 2000 && terminalids[i] < 3000) terminals[i].type = terminal_t::BO;
 
+		/* Now set the input/output sizes */
+		/* We set them to 0 earlier in this loop */
+		switch(terminals[i].type)
+		{
+			case terminal_t::AI:
+			case terminal_t::AO:
+				terminals[i].in_size = info->m_nInputSize;
+				terminals[i].out_size = info->m_nOutputSize;
+				break;
+			case terminal_t::BI:
+			case terminal_t::BO:
+				terminals[i].inb_size = info->m_nInputSize;
+				terminals[i].outb_size = info->m_nOutputSize;
+				break;
+			default:
+				break;
+		}
+
+		/* Ignore everything less than 3k as we're only doing the analog mapping right now */
+		if(info->m_nID < 3000) continue;
+
 		inp_start += info->m_nInputSize;
 		outp_start += info->m_nOutputSize;
-
 	}
 
 	/* Do the same for the input bits */
@@ -241,8 +269,6 @@ void drvEK9000::MapTerminals()
 		outb_start += info->m_nOutputSize;
 		inb_start += info->m_nInputSize;
 	}
-
-
 }
 
 /**
@@ -369,6 +395,44 @@ bool drvEK9000::doCoEIO(coe_req_t req)
 {
 	return this->doCoEIO(req.type == COE_REQ_WRITE, req.termid, req.index, req.subindex, BYTES_TO_REG(req.length), req.pdata);
 }
+
+void drvEK9000::DumpTerminalMapping()
+{
+	for(int i = 0; i < this->num_terminals; i++)
+	{
+		epicsPrintf("--------------------------------\n");
+		epicsPrintf("#%u: EL%u\n", terminals[i].id);
+		epicsPrintf("Input registers:  0x%X-0x%X\n", terminals[i].in_start);
+		epicsPrintf("Output registers: 0x%X-0x%X\n", terminals[i].out_start);
+		epicsPrintf("Input coils:      0x%X-0x%X\n", terminals[i].inb_start);
+		epicsPrintf("Output coils:     0x%X-0x%X\n", terminals[i].outb_start);
+	}
+}
+
+void drvEK9000::DumpStats()
+{
+
+}
+
+void drvEK9000::DumpInfo()
+{
+
+}
+
+void drvEK9000::DumpEverything()
+{
+	this->DumpInfo();
+	this->DumpStats();
+	this->DumpTerminalMapping();
+}
+
+/*
+================================================================
+
+iocsh functions
+
+================================================================
+*/
 
 void ek9000Register(const iocshArgBuf* args)
 {
