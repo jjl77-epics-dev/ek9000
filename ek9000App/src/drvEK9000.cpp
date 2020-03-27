@@ -81,9 +81,24 @@ void drvEK9000::PollThreadFunc(void* lparam)
 
 		asynPrint(_this->pasynUserSelf, ASYN_TRACE_FLOW, "%s: %s\n", function, step);
 
-		/* In order to reduce the number of mutex locks for the swap space mutex, let's read input data now rather than later */
-		status = _this->doModbusIO(0, MODBUS_READ_INPUT_REGISTERS, INPUT_PDO_START, _this->inputSwapSpace, 0xFF); /* Copy 0xFF bytes (the size of the PDO) */
-		status = _this->doModbusIO(0, MODBUS_READ_DISCRETE_INPUTS, INPUT_COIL_START, _this->inputBitSwap, 0xFF);  /* Copy 0xFF bytes (the size of the PDO) */
+		/* Read the input registers */
+		step = "ReadInputRegisters";
+		if( _this->doModbusIO(0, MODBUS_READ_INPUT_REGISTERS, INPUT_PDO_START, _this->inputSwapSpace, 120) 				!= asynSuccess ||
+			_this->doModbusIO(0, MODBUS_READ_INPUT_REGISTERS, INPUT_PDO_START + 120, &_this->inputSwapSpace[120], 120)	!= asynSuccess ||
+			_this->doModbusIO(0, MODBUS_READ_INPUT_REGISTERS, INPUT_PDO_START + 240, &_this->inputSwapSpace[240], 15)	!= asynSuccess)
+		{
+			asynPrint(_this->pasynUserSelf, ASYN_TRACE_ERROR, "%s:%s Failed to read input registers, skipping to input bits\n", 
+				function, step);
+		}
+
+		/* Read input bits */
+		step = "ReadInputBits";
+		if( _this->doModbusIO(0, MODBUS_READ_DISCRETE_INPUTS, INPUT_PDO_START, _this->inputBitSwap, 120) 				!= asynSuccess ||
+			_this->doModbusIO(0, MODBUS_READ_DISCRETE_INPUTS, INPUT_PDO_START + 120, &_this->inputBitSwap[120], 120)	!= asynSuccess ||
+			_this->doModbusIO(0, MODBUS_READ_DISCRETE_INPUTS, INPUT_PDO_START + 240, &_this->inputBitSwap[240], 15)		!= asynSuccess)
+		{
+			asynPrint(_this->pasynUserSelf, ASYN_TRACE_ERROR, "%s:%s Failed to read input bits.\n", function, step);
+		}
 
 		/* Trace the flow of the program */
 		step = "SwapRegisters";
@@ -115,10 +130,30 @@ void drvEK9000::PollThreadFunc(void* lparam)
 		
 		step = "WriteOutputRegisters";
 		asynPrint(_this->pasynUserSelf, ASYN_TRACE_FLOW, "%s: %s\n", function, step);
+
+		/**
+		 * NOTE: modbus TCP can only write/read 123 registers at a time, so that means we need
+		 * to break up the modbus requests into multiple pieces
+		 */ 
 		
-		/* Finally perform the actual IO */
-		status = _this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, OUTPUT_PDO_START, _this->outputSwapSpace, OUTPUT_REG_SIZE);
-		status = _this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_COILS, OUTPUT_COIL_START, _this->outputBitSwap, OUTPUT_BIT_SIZE);
+		/* Do I/O for the output registers */
+		step = "WriteOutputRegisters";
+		if( _this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, OUTPUT_PDO_START, _this->outputSwapSpace, 120) != asynSuccess ||
+			_this->doModbusIO(0 ,MODBUS_WRITE_MULTIPLE_REGISTERS, OUTPUT_PDO_START + 120, &_this->outputSwapSpace[120], 120) != asynSuccess ||
+			_this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, OUTPUT_PDO_START + 240, &_this->outputSwapSpace[240], 15) != asynSuccess)
+		{
+			asynPrint(_this->pasynUserSelf, ASYN_TRACE_ERROR, "%s:%s Failed to write output registers, skipping to output bits.\n",
+				function, step);
+		}
+
+		/* Do I/O for the coils */
+		step = "WriteOutputCoils";
+		if( _this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_COILS, OUTPUT_COIL_START, _this->outputBitSwap, 120) != asynSuccess ||
+			_this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_COILS, OUTPUT_COIL_START + 120, &_this->outputBitSwap[120], 120) != asynSuccess ||
+			_this->doModbusIO(0, MODBUS_WRITE_MULTIPLE_COILS, OUTPUT_COIL_START + 240, &_this->outputBitSwap[240], 15) != asynSuccess)
+		{
+			asynPrint(_this->pasynUserSelf, ASYN_TRACE_ERROR, "%s:%s Failed to write output bits\n", function, step);
+		}
 
 		/* Set the last time */
 		_this->prevTime = (clock()) / (CLOCKS_PER_SEC/1000.0f);
