@@ -390,10 +390,6 @@ bool drvEK9000::doCoEIO(bool rw, epicsUInt16 termid, epicsUInt16 index, epicsUIn
 	}
 }
 
-void drvEK9000::DumpInfo()
-{
-}
-
 /* Enqueues a CoE IO request, optionally putting it at the front of the queue */
 void drvEK9000::RequestCoEIO(coe_req_t req, bool immediate)
 {

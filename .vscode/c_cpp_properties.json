@@ -3,17 +3,16 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/../../../base/include/os/Linux/",
-                "${workspaceFolder}/../../../base/include",
-                "${workspaceFolder}/../../include",
-                "/usr/include/c++/8/",
-                "/home/jeremy/epics-r3-14/base/include",
-				"/usr/include/",
-				"${workspaceFolder}/ek9000App/src/O.Common/",
-                "/usr/include/i386-linux-gnu/",
-                "/usr/local/include/",
-				"/usr/include/x86_64-linux-gnu/c++/7"
+		"${workspaceFolder}/**",
+		"${workspaceFolder}/../asyn-r4-39/include",
+		"${workspaceFolder}/../modbus-r3-0/include",
+                "/nfs/epics/epics-7.0.4-arm/base/include/os/Linux/",
+                "/nfs/epics/epics-7.0.4-arm/base/include/compiler/gcc",
+                "/nfs/epics/epics-7.0.4-arm/base/include",
+                "/nfs/epics/epics-7.0.4-arm/base/include",
+		"/usr/include/",
+		"${workspaceFolder}/ek9000App/src/O.Common/",
+                "/usr/local/include/"
             ],
             "defines": [
                 "_X86_",
