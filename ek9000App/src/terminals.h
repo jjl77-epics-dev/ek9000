@@ -364,6 +364,24 @@ static const STerminalInfoConst_t EL2088_Info = {EL2088_STRING, EL2088_ID, EL208
 static const STerminalInfoConst_t EL2124_Info = {EL2124_STRING, EL2124_ID, EL2124_OUTPUT_SIZE, EL2124_INPUT_SIZE};
 
 //=========================================================//
+// EL2808
+//=========================================================//
+#define	EL2808_STRING	"EL2808"
+#define	EL2808_ID	2808
+#define	EL2808_OUTPUT_SIZE	8
+#define	EL2808_INPUT_SIZE	0
+static const STerminalInfoConst_t EL2808_Info = {EL2808_STRING, EL2808_ID, EL2808_OUTPUT_SIZE, EL2808_INPUT_SIZE};
+
+//=========================================================//
+// EL2809
+//=========================================================//
+#define	EL2809_STRING	"EL2809"
+#define	EL2809_ID	2809
+#define	EL2809_OUTPUT_SIZE	16
+#define	EL2809_INPUT_SIZE	0
+static const STerminalInfoConst_t EL2809_Info = {EL2809_STRING, EL2809_ID, EL2809_OUTPUT_SIZE, EL2809_INPUT_SIZE};
+
+//=========================================================//
 // EL3001
 //=========================================================//
 #define	EL3001_STRING	"EL3001"
@@ -888,8 +906,8 @@ static const STerminalInfoConst_t EL7047_Info = {EL7047_STRING, EL7047_ID, EL704
 //=========================================================//
 // Array of terminal info structures
 //=========================================================//
-#define	NUM_TERMINALS	97
-static const STerminalInfoConst_t* g_pTerminalInfos[97] = {
+#define	NUM_TERMINALS	99
+static const STerminalInfoConst_t* g_pTerminalInfos[99] = {
 	&EL1001_Info,
 	&EL1002_Info,
 	&EL1004_Info,
@@ -929,6 +947,8 @@ static const STerminalInfoConst_t* g_pTerminalInfos[97] = {
 	&EL2084_Info,
 	&EL2088_Info,
 	&EL2124_Info,
+	&EL2808_Info,
+	&EL2809_Info,
 	&EL3001_Info,
 	&EL3002_Info,
 	&EL3004_Info,

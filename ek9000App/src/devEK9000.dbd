@@ -1,2 +1,34 @@
 # SNL programs or functions to be invoked from iocsh
-registrar(ek9k_register)
+registrar(ek9000RegisterFunctions)
+
+# Basically just for init
+device(bo,INST_IO,devEK9000,"EK9000")
+
+# EL11XX devices
+device(bi,INST_IO,devEL10XX, "EL10XX")
+
+# EL20XX devices
+device(bo,INST_IO,devEL20XX, "EL20XX")
+
+# EL30XX devices
+device(ai,INST_IO,devEL30XX, "EL30XX")
+device(ai,INST_IO,devEL30XX, "EL31XX")
+
+# EL40XX devices
+device(ao,INST_IO,devEL40XX, "EL40XX")
+device(ao,INST_IO,devEL40XX, "EL41XX")
+
+device(int64in,INST_IO,devEK9KCoERO,"CoEParamInt64RO")
+device(int64in,INST_IO,devEK9KCoERO,"CoEParamInt32RO")
+device(int64in,INST_IO,devEK9KCoERO,"CoEParamInt16RO")
+device(int64in,INST_IO,devEK9KCoERO,"CoEParamInt8RO")
+device(int64in,INST_IO,devEK9KCoERO,"CoEParamBoolRO")
+
+device(int64out,INST_IO,devEK9KCoERW,"CoEParamInt64RW")
+device(int64out,INST_IO,devEK9KCoERW,"CoEParamInt32RW")
+device(int64out,INST_IO,devEK9KCoERW,"CoEParamInt16RW")
+device(int64out,INST_IO,devEK9KCoERW,"CoEParamInt8RW")
+device(int64out,INST_IO,devEK9KCoERW,"CoEParamBoolRW")
+
+device(longin,INST_IO,devEK9000ConfigRO,"EK9000ParamRO")
+device(longout,INST_IO,devEK9000ConfigRW,"EK9000ParamRW")
