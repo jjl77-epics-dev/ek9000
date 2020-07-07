@@ -12,6 +12,7 @@ EPICS_BASE=/home/jeremy/epics-7/base
 # Modbus and ASYN modules are dependencies
 MODBUS=$(SUPPORT)/modbus
 ASYN=$(SUPPORT)/asyn-4-36
+MOTOR=$(SUPPORT)/motor-r7-2
 
 -include $(TOP)/configure/RELEASE.local 
 -include $(TOP)/../configure/EPICS_BASE.$(EPICS_HOST_ARCH)
