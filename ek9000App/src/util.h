@@ -44,3 +44,76 @@ namespace util
 	void Error(const char* fmt, ...);
 }
 
+/**
+ * Utility locked semaphore class
+ */ 
+class lockedSemaphore
+{
+private:
+	int users;
+public:
+	lockedSemaphore() {
+		users = 0;
+	};
+
+	~lockedSemaphore() {
+	}
+
+	/**
+	 * Decrements the number of users
+	 */ 
+	void removeUser()
+	{
+		epicsAtomicDecrIntT(&users);
+	}
+
+	/**
+	 * Increments the number of users
+	 * blocks until the spinlock is released
+	 */ 
+	void addUser()
+	{
+		while(epicsAtomicGetIntT(&users) == -1) {};
+		do {
+			int val = epicsAtomicGetIntT(&users);
+			if( val == epicsAtomicCmpAndSwapIntT(&users, val, val++))
+				break;
+		} while(1);
+	}
+
+	/**
+	 * Same as addUser but it fails if the spinlock is not released
+	 */ 
+	bool tryAddUser()
+	{
+		if(epicsAtomicGetIntT(&users) == -1) return false;
+		do {
+			int val = epicsAtomicGetIntT(&users);
+			if( val == epicsAtomicCmpAndSwapIntT(&users, val, val++))
+				break;
+		} while(1);
+		return true;
+	}
+
+	/**
+	 * Performs a lock operation
+	 * blocks until the lock is taken
+	 */ 
+	void lock()
+	{
+		while(epicsAtomicCmpAndSwapIntT(&users, 0, -1) != 0) {};
+	}
+
+	bool tryLock()
+	{
+		return epicsAtomicCmpAndSwapIntT(&users, 0, -1) == 0;
+	}
+
+	void unlock()
+	{
+		epicsAtomicSetIntT(&users, 0);
+	}
+
+
+};
+
