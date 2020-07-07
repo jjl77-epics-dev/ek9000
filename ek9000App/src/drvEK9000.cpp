@@ -49,6 +49,11 @@ drvEK9000::drvEK9000(const char* ek, const char* port, const char* ipport, const
 	this->coeMutex = epicsSpinCreate();
 }
 
+drvEK9000::~drvEK9000()
+{
+	
+}
+
 void drvEK9000::StartPollThread()
 {
 	/* Create the name for the thread */
