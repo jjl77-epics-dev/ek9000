@@ -4,7 +4,8 @@
  * Common utilities for use with epics
  *
  */ 
-#include "util.h"
+#include "ekUtil.h"
+#include "drvEK9000.h"
 #include <memory.h>
 #include <stdlib.h>
 #include <vector>
@@ -48,23 +49,40 @@ void* util::parseAndCreateDpvt(char* instio)
 {
 	if(!instio) return nullptr;
 	int pindex = 0;
+	char* newinstio = strdup(instio);
 	
-	for(char* subst = strtok(instio, ","); subst; subst = strtok(NULL, ","), pindex++)
-	{
-
-	}
-
-	if(pindex < 2)
-	{
-		epicsPrintf("Syntax error in instio string: %s\n", instio);
-		return nullptr;
-	}
-
-	int ncommas = 0;
-	size_t len = strlen(instio);
+	size_t len = strlen(newinstio);
+	size_t num_commas = 0;
+	for(int i = 0; i < len; i++) if(newinstio[i] == ',') num_commas++;
+	char** pointers = static_cast<char**>(malloc(sizeof(char*) * num_commas));
+	char* prevptr = nullptr;
+	int ptrpos = 0;
 	for(int i = 0; i < len; i++)
 	{
-		
+		if(!prevptr)
+		{
+			prevptr = &newinstio[i];
+			continue;
+		}
+		if(newinstio[i] == ',')
+		{
+			newinstio[i] = 0;
+			pointers[ptrpos] = prevptr;
+			ptrpos++;
+		}
+	}
+
+	const char* ek9k_name = pointers[0];
+	const char* pos_num = pointers[1];
+	const char* channel = pointers[2];
+
+	terminal_dpvt_t dpvt;
+	dpvt.pdrv = drvEK9000::FindByName(ek9k_name);
+
+	if(!dpvt.pdrv)
+	{
+		util::Log("device '%s' not found.", instio);
+		return nullptr;
 	}
 }
 

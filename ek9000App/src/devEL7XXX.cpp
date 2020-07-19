@@ -65,10 +65,10 @@
 #include <vector>
 
 #include "asynDriver.h"
-#include "devEK9000.h"
+#include "drvEK9000.h"
 #include "devEL7XXX.h"
 #include "errlog.h"
-#include "diag.h"
+#include "bhcDiag.h"
 
 #define EL7047_START_TYPE_ABSOLUTE 0x1 
 #define EL7047_START_TYPE_RELATIVE 0x2 

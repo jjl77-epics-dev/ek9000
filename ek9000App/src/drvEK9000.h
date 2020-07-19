@@ -20,6 +20,7 @@
 #include <epicsTypes.h>
 #include <epicsSpin.h>
 #include <deque>
+#include "ekUtil.h"
 
 /* Common EK9000 registers */
 #define STATUS_REGISTER_BASE 	0x1000 
@@ -197,6 +198,16 @@ public:
 	static void PollThreadFunc(void* lparam);
 
 	/**
+	 * Performs a read operation for the specified terminal
+	 */  
+	bool doRead(terminal_dpvt_t dpvt, void* outbuf, size_t maxlen);
+
+	/**
+	 * Performs a write operation for the specified terminal
+	 */ 
+	bool doWrite(terminal_dpvt_t dpvt, const void* buf, size_t buflen);
+
+	/**
 	 * DumpXXX functions are used to print debugging info to the ioc console
 	 */ 
 	void DumpTerminalMapping();
@@ -236,6 +247,12 @@ public:
 	/* Mutex for swapping of input/output spaces */
 	/* Ideally a spinlock is used here since we're only going to be locking for a couple us */
 	epicsSpinId swapMutex;
+
+	/* Inread of a mutex, we use a custom lockedSemaphore class */
+	/* when we write some data to the swap spaces, we add ourselves as a user to this semaphore, and remove ourselves when the read/write is done */
+	/* while there are active users, this semaphore cannot be locked. it also behaves like a spinlock, so not exactly ideal */
+	/* during operation, we will only be locking for like ~100-200 clock cycles, so it's actually more efficient to use a spinlock instead of a mutex */
+	lockedSemaphore swapSemaphore;
 	 
 	/* Polling thread handle */
 	epicsThreadId pollThread;
@@ -253,6 +270,6 @@ public:
 	 */ 
 	terminal_t terminals[0xFF];
 	int num_terminals;
+
+	static drvEK9000* FindByName(const char* name);
 };
-
-

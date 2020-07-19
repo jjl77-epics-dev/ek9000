@@ -14,11 +14,15 @@
 /* List of all terminals */
 #include "terminals.h"
 
+#define EL30XX_FLAG_STANDARD 0x1 
+
 typedef struct 
 {
 	class drvEK9000* pdrv;
 	int slave, terminal, channel;
 	int baseaddr, len;
+	void* rwbuf; // pointer to a temp buf so we dont need to keep free-ing and malloc-ing
+	unsigned long flags;
 } terminal_dpvt_t;
 
 namespace util

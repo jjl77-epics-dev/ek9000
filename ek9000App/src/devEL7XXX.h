@@ -25,7 +25,11 @@
 #include <modbus.h>
 #include <modbusInterpose.h>
 
+#ifdef OLD_EK9000
 #include "devEK9000.h"
+#else
+#include "drvEK9000.h"
+#endif 
 
 /* For Positioning interface compact */
 /* RxPDOs : 0x1601 0x1602 0x1605 (things written to terminal by epics) */
@@ -231,6 +235,27 @@ CoE parameters for the EL7047
 
 ========================================================
 */
+
+#define COE_INT16_SIZE 2
+#define COE_INT32_SIZE 4
+#define COE_INT64_SIZE 8
+
+struct coe_param_t 
+{
+	const char* name;
+	const char* unit;
+	unsigned int index;
+	unsigned int subindex;
+	enum 
+	{
+		COE_PARAM_INT8,
+		COE_PARAM_INT16,
+		COE_PARAM_INT32,
+		COE_PARAM_STRING,
+		COE_PARAM_FLOAT32,
+	} type;
+	int length; /* Only if a string */
+};
 
 static const coe_param_t el7047_coe_params[] = {
 	{"maximal-current",  "mA",          0x8010, 0x1, coe_param_t::COE_PARAM_INT16, -1}, // 0

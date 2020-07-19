@@ -34,9 +34,9 @@
 #include <queue>
 
 #include "drvEK9000.h"
-#include "util.h"
+#include "ekUtil.h"
 
-std::vector<drvEK9000*> devices;
+std::vector<drvEK9000*> g_devices;
 
 /* Quick conversion macro to convert from bytes to modbus registers */
 #define BYTES_TO_REG(x) (((x) % 2) == 0 ? (x) / 2 : ((x) / 2) + 1)
@@ -462,6 +462,16 @@ void drvEK9000::DumpEverything()
 	this->DumpTerminalMapping();
 }
 
+drvEK9000* drvEK9000::FindByName(const char* name)
+{
+	for(auto x : g_devices)
+	{
+		if(strcmp(name, x->name) == 0)
+			return x;
+	}
+	return nullptr;
+}
+
 /*
 ================================================================
 
@@ -477,7 +487,7 @@ void ek9000Register(const iocshArgBuf* args)
 	const char* ip = args[2].sval;
 
 	/* Check if already registered */
-	for(auto x : devices)
+	for(auto x : g_devices)
 	{
 		if(strcmp(x->name, ek9k) == 0)
 		{
@@ -494,7 +504,7 @@ void ek9000Register(const iocshArgBuf* args)
 	drvAsynIPPortConfigure(octetport, ip, 0, 0, 0);
 	auto ek = new drvEK9000(ek9k, port, octetport, ip);
 
-	devices.push_back(ek);
+	g_devices.push_back(ek);
 }
 
 void ek9000AddTerminal(const iocshArgBuf* args)

@@ -3,7 +3,7 @@
  * CoE diagnostics support
  *
  */ 
-#include "diag.h"
+#include "bhcDiag.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
@@ -30,10 +30,6 @@ int COE_DecodeDiagString(void* string, char* outbuf, unsigned int outbuflen)
 	/* Print out a timestamp */
 	snprintf(buf, sizeof(buf),  "%s", asctime(localtime((time_t*)&msg.timestamp)));
 	
-	//snprintf(buf, sizeof(buf),  "%s Diagnostic code: %X, Flags: 0x%X, TextID: 0x%X\n",
-	//		buf, msg.diag_code, msg.flags, msg.textid);
-	//strncpy(outbuf, buf, outbuflen);
-	//return outbuflen;
 	/* Print in the type of message */
 	switch((msg.textid & 0xF000) >> 11)
 	{

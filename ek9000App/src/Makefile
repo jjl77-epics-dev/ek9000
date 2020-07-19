@@ -19,9 +19,9 @@ USR_CXXFLAGS += -Wunused -Wall -Wextra -Wpedantic
 endif 
 
 # Records/Device support sources
-ek9000Support_SRCS += diag.cpp
+ek9000Support_SRCS += ekDiag.cpp
 ek9000Support_SRCS += drvEK9000.cpp
-ek9000Support_SRCS += util.cpp
+ek9000Support_SRCS += ekUtil.cpp
 
 ek9000Support_LIBS += $(EPICS_BASE_IOC_LIBS)
 ek9000Support_LIBS += modbus
