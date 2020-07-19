@@ -38,3 +38,6 @@ tparse\.py
 
 /*.xml
 .clangd
+
+BhcConfigFiles.zip
+BhcConfigFiles
