@@ -225,17 +225,28 @@ public:
 
 	int LastADSErr = 0;
 
+	size_t m_inputRegSize = 0;		// Input register size IN BYTES
+	size_t m_holdingRegSize = 0;	// Holding register size IN BYTES
+	size_t m_coilSize = 0;			// Coil input size IN BITS
+	size_t m_discInpSize = 0;		// Discrete input size IN BITS
+
+	struct regmap_t {
+		uint16_t* m_inputRegisters = nullptr; // Read
+		uint16_t* m_holdingRegisters = nullptr; // Write
+		uint16_t* m_coils = nullptr; // Read
+		uint16_t * m_discInputs = nullptr; // Write
+	};
+
+	regmap_t* m_curMap = nullptr;		// All Writes go here, latest data available here
+	regmap_t* m_prevMap = nullptr;		// Used to check for delta between cur and prev
+
 public:
 	devEK9000();
-
-	/* Make  sure to free everything */
 	~devEK9000();
-
 public:
 	static devEK9000* FindDevice(const char* name);
 
 public:
-	/* Allows for better error handling (instead of using print statements to indicate error) */
 	static devEK9000* Create(const char* name, const char* ip, int terminal_count);
 
 	int AddTerminal(const char* name, int type, int position);

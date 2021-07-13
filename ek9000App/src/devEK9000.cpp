@@ -57,6 +57,7 @@
 #include <drvModbusAsyn.h>
 #include <drvAsynIPPort.h>
 #include <modbusInterpose.h>
+#include <cstring>
 
 #include "devEK9000.h"
 #include "terminals.h"
@@ -213,11 +214,7 @@ int devEK9000Terminal::doEK9000IO(int type, int startaddr, uint16_t* buf, size_t
 	if (!this->m_device || !this->m_device->m_driver) {
 		return EK_EBADTERM;
 	}
-	int status = this->m_device->m_driver->doModbusIO(0, type, startaddr, buf, len);
-	if (status) {
-		return (status + 0x100);
-	}
-	return EK_EOK;
+	return m_device->doEK9000IO(type, startaddr, len, buf);
 }
 
 //==========================================================//
@@ -370,6 +367,28 @@ int devEK9000::InitTerminals() {
 	}
 	m_init = true;
 
+	/* Read PDO mapping sizes and init our maps */
+	uint16_t data[4];
+	m_driver->doModbusIO(0, MODBUS_READ_INPUT_REGISTERS, 0x1010, data, 4);
+	m_holdingRegSize = data[0] / 8; // ek9k provides this value in bits
+	m_inputRegSize = data[1] / 8; // same here - also in bits
+	m_coilSize = data[2];
+	m_discInpSize = data[3];
+
+	m_curMap = new regmap_t();
+	m_prevMap = new regmap_t();
+
+	/* Alloc register maps */
+	m_prevMap->m_coils = static_cast<uint16_t *>(calloc(m_coilSize, sizeof(uint16_t)));
+	m_prevMap->m_inputRegisters = static_cast<uint16_t *>(calloc(m_inputRegSize / 2, sizeof(uint16_t)));
+	m_prevMap->m_discInputs = static_cast<uint16_t *>(calloc(m_discInpSize, sizeof(uint16_t)));
+	m_prevMap->m_holdingRegisters = static_cast<uint16_t*>(calloc(m_holdingRegSize, sizeof(uint16_t)));
+
+	m_curMap->m_coils = static_cast<uint16_t *>(calloc(m_coilSize, sizeof(uint16_t)));
+	m_curMap->m_inputRegisters = static_cast<uint16_t *>(calloc(m_inputRegSize / 2, sizeof(uint16_t)));
+	m_curMap->m_discInputs = static_cast<uint16_t *>(calloc(m_discInpSize, sizeof(uint16_t)));
+	m_curMap->m_holdingRegisters = static_cast<uint16_t*>(calloc(m_holdingRegSize, sizeof(uint16_t)));
+
 	/* Figure out the register map */
 	int coil_in = 1, coil_out = 1;
 	int reg_in = 0, reg_out = 0x800;
@@ -498,25 +517,34 @@ int devEK9000::doCoEIO(int rw, uint16_t term, uint16_t index, uint16_t len, uint
 	}
 }
 
-int devEK9000::doEK9000IO(int rw, uint16_t addr, uint16_t len, uint16_t* data) {
-	int status = 0;
-	/* write */
-	if (rw) {
-		status = this->m_driver->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, addr, data, len);
-		if (status) {
-			return status + 0x100;
-		}
-		return EK_EOK;
+int devEK9000::doEK9000IO(int type, uint16_t addr, uint16_t len, uint16_t* data) {
+	printf("READ\n");
+	switch (type) {
+		case MODBUS_WRITE_MULTIPLE_COILS:
+			std::memcpy(m_curMap->m_coils + addr, data, len * sizeof(uint16_t));
+			return 0;
+		case MODBUS_WRITE_MULTIPLE_REGISTERS:
+			addr -= 0x800; // holding registers start at 0x800
+			std::memcpy(m_curMap->m_holdingRegisters + addr, data, sizeof(uint16_t) * len);
+			return 0;
+		case MODBUS_READ_DISCRETE_INPUTS:
+			std::memcpy(data, m_curMap->m_discInputs + addr, sizeof(uint16_t) * len);
+			return 0;
+		case MODBUS_READ_INPUT_REGISTERS:
+			std::memcpy(data, m_curMap->m_inputRegisters + addr, sizeof(uint16_t) * len);
+			return 0;
+		case MODBUS_WRITE_SINGLE_COIL:
+			std::memcpy(m_curMap->m_coils + addr, data, sizeof(uint16_t) * len);
+			return 0;
+		case MODBUS_WRITE_SINGLE_REGISTER:
+			addr -= 0x800; // holding registers start at 0x800
+			std::memcpy(m_curMap->m_holdingRegisters + addr, data, sizeof(uint16_t));
+			return 0;
+		default:
+			assert(!"Unknown IO type");
+			break;
 	}
-	/* read */
-	else {
-		status = this->m_driver->doModbusIO(0, MODBUS_READ_HOLDING_REGISTERS, addr, data, len);
-		if (status) {
-			return status + 0x100;
-		}
-		return EK_EOK;
-	}
-	return EK_EBADPARAM;
+	return 1;
 }
 
 /* Read terminal type */
@@ -1085,19 +1113,20 @@ epicsExportRegistrar(ek9000RegisterFunctions);
 //======================================================//
 static long ek9000_init(int);
 static long ek9000_init_record(void* prec);
+static long ek9000_read_record(void* prec);
 
 struct {
 	long number;
 	DEVSUPFUN dev_report;
 	DEVSUPFUN init;
-	DEVSUPFUN init_record;
+	DEVSUPFUN init_record; /*returns: (-1,0)=>(failure,success)*/
 	DEVSUPFUN get_ioint_info;
-	DEVSUPFUN write_record;
-} devEK9000 = {
-	5, NULL, (DEVSUPFUN)ek9000_init, (DEVSUPFUN)ek9000_init_record, NULL, NULL,
+	DEVSUPFUN read_longin; /*returns: (-1,0)=>(failure,success)*/
+} devEK9000Rec = {
+	5, NULL, (DEVSUPFUN)ek9000_init, (DEVSUPFUN)ek9000_init_record, NULL, ek9000_read_record,
 };
 
-epicsExportAddress(dset, devEK9000);
+epicsExportAddress(dset, devEK9000Rec);
 
 static long ek9000_init(int after) {
 	if (after == 0) {
@@ -1112,9 +1141,56 @@ static long ek9000_init(int after) {
 	return 0;
 }
 
-static long ek9000_init_record(void*) {
-	epicsPrintf("FATAL ERROR: You should not use devEK9000 on any records!\n");
-	epicsAssert(__FILE__, __LINE__, "FATAL ERROR: You should not use devEK9000 on any records!\n", "Jeremy L.");
+static long ek9000_init_record(void* prec) {
+	longinRecord* longin = static_cast<longinRecord*>(prec);
+	const auto constStr = longin->inp.value.constantStr;
+
+	// Device passed in via INP field
+	for(const auto& dev : g_Devices) {
+		if(!strcmp(dev->m_name, constStr)) {
+			longin->dpvt = dev;
+			return 0;
+		}
+	}
+	return 1; // Could not find the device
+}
+
+static long ek9000_read_record(void* prec) {
+	auto* longin = static_cast<longinRecord*>(prec);
+	auto* dev = static_cast<devEK9000*>(longin->dpvt);
+	dev->Lock();
+
+	int failed = 0;
+	printf("DO READ\n");
+
+	// Read all of the inputs
+	if(dev->m_driver->doModbusIO(0, MODBUS_READ_INPUT_REGISTERS, 0x0, dev->m_curMap->m_inputRegisters, static_cast<int>(dev->m_inputRegSize / 2)))
+		failed = 1;
+	if(dev->m_driver->doModbusIO(0, MODBUS_READ_DISCRETE_INPUTS, 0x1, dev->m_curMap->m_discInputs, dev->m_discInpSize))
+		failed = 1;
+
+	// To avoid unnecessary writes, memcmp between old and new register spaces, and only write if there's a delta
+	if(std::memcmp(dev->m_curMap->m_holdingRegisters, dev->m_prevMap, dev->m_holdingRegSize) != 0) {
+		if(dev->m_driver->doModbusIO(0, MODBUS_WRITE_MULTIPLE_REGISTERS, 0x800, dev->m_curMap->m_holdingRegisters, static_cast<int>(dev->m_holdingRegSize / 2)))
+			failed = 1;
+	}
+	if(std::memcmp(dev->m_curMap->m_coils, dev->m_prevMap->m_coils, dev->m_coilSize * sizeof(uint16_t)) != 0) {
+		if(dev->m_driver->doModbusIO(0, MODBUS_WRITE_MULTIPLE_COILS, 0x0, dev->m_curMap->m_coils, dev->m_coilSize))
+			failed = 1;
+	}
+
+	// Propagate changes into the old reg map
+	std::memcpy(dev->m_prevMap->m_coils, dev->m_curMap->m_coils, dev->m_coilSize * sizeof(uint16_t));
+	std::memcpy(dev->m_prevMap->m_holdingRegisters, dev->m_curMap->m_holdingRegisters, dev->m_holdingRegSize);
+	std::memcpy(dev->m_prevMap->m_inputRegisters, dev->m_curMap->m_inputRegisters, dev->m_inputRegSize);
+	std::memcpy(dev->m_prevMap->m_discInputs, dev->m_curMap->m_discInputs, dev->m_discInpSize * sizeof(uint16_t));
+
+	// Reset WDT
+	dev->WriteWatchdogReset();
+
+	longin->val = failed;
+
+	dev->Unlock();
 	return 0;
 }
 
