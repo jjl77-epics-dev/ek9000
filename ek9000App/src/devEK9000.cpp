@@ -75,49 +75,11 @@ class CDeviceMgr;
 /* Globals */
 CDeviceMgr* g_pDeviceMgr = 0;
 bool g_bDebug = false;
-epicsThreadId g_PollThread = 0;
-epicsMutexId g_ThreadMutex = 0;
-int g_nPollDelay = 250;
 std::list<devEK9000*> g_Devices;
 
 /* Global list accessor */
 std::list<devEK9000*>& GlobalDeviceList() {
 	return g_Devices;
-}
-
-//==========================================================//
-// Utils
-//==========================================================//
-void PollThreadFunc(void* param);
-
-void Utl_InitThread() {
-	g_ThreadMutex = epicsMutexCreate();
-	g_PollThread = epicsThreadCreate("EK9000_PollThread", priorityHigh, epicsThreadGetStackSize(epicsThreadStackMedium),
-									 PollThreadFunc, NULL);
-}
-
-void PollThreadFunc(void*) {
-	while (true) {
-		for (auto device : g_Devices) {
-			int status = device->Lock();
-			/* check connection */
-			bool connected = device->VerifyConnection();
-			if (!connected && device->m_connected) {
-				util::Warn("%s: Link status changed to DISCONNECTED\n", device->m_name);
-				device->m_connected = false;
-			}
-			if (connected && !device->m_connected) {
-				util::Warn("%s: Link status changed to CONNECTED\n", device->m_name);
-				device->m_connected = true;
-			}
-			if (status)
-				continue;
-			uint16_t buf = 1;
-			device->m_driver->doModbusIO(0, MODBUS_WRITE_SINGLE_REGISTER, 0x1121, &buf, 1);
-			device->Unlock();
-		}
-		epicsThreadSleep((float)g_nPollDelay / 1000.0f);
-	}
 }
 
 //==========================================================//
@@ -129,7 +91,7 @@ devEK9000Terminal::devEK9000Terminal(const devEK9000Terminal& other) {
 	this->m_outputSize = other.m_outputSize;
 	this->m_inputStart = other.m_inputStart;
 	this->m_outputStart = other.m_outputStart;
-	this->m_recordName = strdup(other.m_recordName);
+	this->m_recordName = epicsStrDup(other.m_recordName);
 	this->m_terminalId = other.m_terminalId;
 	this->m_terminalIndex = other.m_terminalIndex;
 	this->m_terminalFamily = other.m_terminalFamily;
@@ -150,7 +112,7 @@ devEK9000Terminal* devEK9000Terminal::Create(devEK9000* device, uint32_t termid,
 	int outp = 0, inp = 0;
 
 	/* Create IO areas and set things like record name */
-	term->m_recordName = strdup(recordname);
+	term->m_recordName = epicsStrDup(recordname);
 	term->m_terminalIndex = termindex;
 	term->m_terminalId = termid;
 
@@ -169,7 +131,7 @@ devEK9000Terminal* devEK9000Terminal::Create(devEK9000* device, uint32_t termid,
 
 devEK9000Terminal* devEK9000Terminal::ProcessRecordName(const char* recname, int& outindex, char* outname) {
 	int good = 0;
-	char* ret = strdup(recname);
+	char* ret = epicsStrDup(recname);
 	size_t len = strlen(ret);
 
 	for (int i = len; i >= 0; i--) {
@@ -267,7 +229,7 @@ devEK9000* devEK9000::Create(const char* name, const char* ip, int terminal_coun
 	free(pek->m_name);
 
 	/* Copy name */
-	pek->m_name = strdup(name);
+	pek->m_name = epicsStrDup(name);
 
 	/* Create terminal name */
 	size_t prefixlen = strlen(PORT_PREFIX);
@@ -278,7 +240,7 @@ devEK9000* devEK9000::Create(const char* name, const char* ip, int terminal_coun
 	pek->m_portName[len - 1] = '\0';
 
 	/* Copy IP */
-	pek->m_ip = strdup(ip);
+	pek->m_ip = epicsStrDup(ip);
 
 	int status = drvAsynIPPortConfigure(pek->m_portName, ip, 0, 0, 0);
 
@@ -1136,7 +1098,6 @@ static long ek9000_init(int after) {
 				dev->InitTerminals();
 		}
 		epicsPrintf("Initialization Complete.\n");
-		Utl_InitThread();
 	}
 	return 0;
 }
